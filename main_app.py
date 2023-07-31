@@ -2,15 +2,24 @@ import streamlit as st
 import os
 import pinecone
 from dotenv import load_dotenv, find_dotenv
-from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Pinecone
+from langchain.embeddings.openai import OpenAIEmbeddings
 
 load_dotenv(find_dotenv(), override=True)
 
+st.write(
+    "Variables been set: \n",
+    os.environ["OPENAI_API_KEY"] == st.secrets["OPENAI_API_KEY"],
+    os.environ["PINECONE_API_KEY"] == st.secrets["PINECONE_API_KEY"],
+    os.environ["PINECONE_ENV"] == st.secrets["PINECONE_ENV"]
+)
+
 pinecone.init(api_key=os.environ.get('PINECONE_API_KEY'),
               environment=os.environ.get('PINECONE_ENV'))
+
 nombre_index = 'heru-gpt'
+embeddings = OpenAIEmbeddings()
 
 
 # ---- Loading documents ----
@@ -48,13 +57,13 @@ def chunking(documents, chunk_size):
 
 # ---- Embedding documents ----
 def create_embeddings(chunks):
-    embeddings = OpenAIEmbeddings()
     index = pinecone.Index(nombre_index)
     # Borrando vectores anteriores
     index.delete(delete_all=True)
     print(index.describe_index_stats())
     # Guardando nuevos vectores
-    vector_store = Pinecone.from_documents(chunks, embeddings, index_name=nombre_index)
+    vector_store = Pinecone.from_documents(
+        chunks, embeddings, index_name=nombre_index)
     return vector_store
 
 
@@ -75,10 +84,10 @@ def ask_and_get_answer(vector_store, question, k=3):
     llm = ChatOpenAI(model='gpt-3.5-turbo', temperature=1)
 
     retriever = vector_store.as_retriever(
-        search_type='similarity', search_kwargs={'k': k})
+        search_type='similarity', search_kwargs={'k': 3})
 
     chain = RetrievalQA.from_chain_type(
-        llm=llm, chain_type='stuff', retriever=retriever)
+        llm=llm, chain_type='stuff', retriever=retriever, verbose=False)
 
     answer = chain.run(question)
 
@@ -98,7 +107,7 @@ if __name__ == '__main__':
         #     os.environ['OPENAI_API_KEY'] = api_key
 
         uploaded_file = st.file_uploader(
-            "Choose a file", type=['txt', 'pdf', 'docx'])
+            "Choose a file", type=['txt'])
         chunk_size = st.number_input(
             'Chunk size', min_value=100, max_value=2048, value=512)
         k = st.number_input('k', min_value=1, max_value=20, value=3)
@@ -125,17 +134,38 @@ if __name__ == '__main__':
                 st.success(
                     'Archivo cargado, chunkeado y embebido correctamente ✅')
 
-    question = st.text_input('Escribe una pregunta relacionada al documento')
+    question = st.text_input('Escribe una pregunta relacionada a Heru')
     if question:
         if 'vs' in st.session_state:
             vector_store = st.session_state.vs
             answer = ask_and_get_answer(vector_store, question, k)
             st.text_area('Respuesta', answer)
 
-        st.divider()
-        if 'history' not in st.session_state:
-            st.session_state.history = ''
-        value = f'Q: {question} \nA {answer}'
-        st.session_state.history += f'{value} \n {"-"*100} \n {st.session_state.history}'
-        h = st.session_state.history
-        st.text_area('Historial', value=h, key='history', height=400)
+            results = vector_store.similarity_search(question, k=k)
+            result_list = []
+            for result in results:
+                result_list.append(result.page_content)
+                result_string = '\n \n \n'.join(result_list)
+            st.divider()
+            with st.expander("Ver chunks de referencia"):
+                st.text(result_string)
+        else:
+            vector_store = Pinecone.from_existing_index(
+                index_name=nombre_index, embedding=embeddings)
+            answer = ask_and_get_answer(vector_store, question, k)
+            st.text_area('Respuesta', answer)
+
+            results = vector_store.similarity_search(question, k=k)
+            result_list = []
+            for result in results:
+                result_list.append(result.page_content)
+                result_string = '\n \n \n'.join(result_list)
+            st.divider()
+            with st.expander("Ver chunks de referencia"):
+                st.text(result_string)
+        # if 'history' not in st.session_state:
+        #     st.session_state.history = ''
+        # value = f'Q: {question} \nA {answer}'
+        # st.session_state.history += f'{value} \n {"-"*100} \n {st.session_state.history}'
+        # h = st.session_state.history
+        # st.text_area('Historial', value=h, key='history', height=200)
