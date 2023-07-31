@@ -5,13 +5,14 @@ from dotenv import load_dotenv, find_dotenv
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.vectorstores import Pinecone
 from langchain.embeddings.openai import OpenAIEmbeddings
+from question_answering import ask_and_get_answer, ask_and_get_answer_memory
 
 load_dotenv(find_dotenv(), override=True)
 
 st.write(
-    "Variables been set: \n",
-    os.environ["OPENAI_API_KEY"] == st.secrets["OPENAI_API_KEY"],
-    os.environ["PINECONE_API_KEY"] == st.secrets["PINECONE_API_KEY"],
+    "Variables loaded: \n",
+    os.environ["OPENAI_API_KEY"] == st.secrets["OPENAI_API_KEY"] and
+    os.environ["PINECONE_API_KEY"] == st.secrets["PINECONE_API_KEY"] and
     os.environ["PINECONE_ENV"] == st.secrets["PINECONE_ENV"]
 )
 
@@ -76,24 +77,6 @@ def calculate_embedding_costs(texts):
     return total_tokens, total_tokens / 1000 * 0.0004
 
 
-# ---- QA function ----
-def ask_and_get_answer(vector_store, question, k=3):
-    from langchain.chains import RetrievalQA
-    from langchain.chat_models import ChatOpenAI
-
-    llm = ChatOpenAI(model='gpt-3.5-turbo', temperature=1)
-
-    retriever = vector_store.as_retriever(
-        search_type='similarity', search_kwargs={'k': 3})
-
-    chain = RetrievalQA.from_chain_type(
-        llm=llm, chain_type='stuff', retriever=retriever, verbose=False)
-
-    answer = chain.run(question)
-
-    return answer
-
-
 # ============== APPLICATION ==============
 if __name__ == '__main__':
     import os
@@ -102,10 +85,6 @@ if __name__ == '__main__':
 
     st.subheader('Heru GPT 🦄')
     with st.sidebar:
-        # api_key = st.text_input('Ingresa tu API KEY', type='password')
-        # if api_key:
-        #     os.environ['OPENAI_API_KEY'] = api_key
-
         uploaded_file = st.file_uploader(
             "Choose a file", type=['txt'])
         chunk_size = st.number_input(
@@ -136,36 +115,16 @@ if __name__ == '__main__':
 
     question = st.text_input('Escribe una pregunta relacionada a Heru')
     if question:
-        if 'vs' in st.session_state:
-            vector_store = st.session_state.vs
-            answer = ask_and_get_answer(vector_store, question, k)
-            st.text_area('Respuesta', answer)
+        vector_store = Pinecone.from_existing_index(
+            index_name=nombre_index, embedding=embeddings)
+        answer = ask_and_get_answer_memory(vector_store, question, k)
+        st.text_area('Respuesta', answer)
 
-            results = vector_store.similarity_search(question, k=k)
-            result_list = []
-            for result in results:
-                result_list.append(result.page_content)
-                result_string = '\n \n \n'.join(result_list)
-            st.divider()
-            with st.expander("Ver chunks de referencia"):
-                st.text(result_string)
-        else:
-            vector_store = Pinecone.from_existing_index(
-                index_name=nombre_index, embedding=embeddings)
-            answer = ask_and_get_answer(vector_store, question, k)
-            st.text_area('Respuesta', answer)
-
-            results = vector_store.similarity_search(question, k=k)
-            result_list = []
-            for result in results:
-                result_list.append(result.page_content)
-                result_string = '\n \n \n'.join(result_list)
-            st.divider()
-            with st.expander("Ver chunks de referencia"):
-                st.text(result_string)
-        # if 'history' not in st.session_state:
-        #     st.session_state.history = ''
-        # value = f'Q: {question} \nA {answer}'
-        # st.session_state.history += f'{value} \n {"-"*100} \n {st.session_state.history}'
-        # h = st.session_state.history
-        # st.text_area('Historial', value=h, key='history', height=200)
+        results = vector_store.similarity_search(question, k=k)
+        result_list = []
+        for result in results:
+            result_list.append(result.page_content)
+            result_string = '\n \n \n'.join(result_list)
+        st.divider()
+        with st.expander("Ver chunks de referencia"):
+            st.text(result_string)
