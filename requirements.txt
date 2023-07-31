@@ -2,3 +2,6 @@ langchain
 pinecone-client
 streamlit
 openai
+python-dotenv
+tiktoken
+pypdf
