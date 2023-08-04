@@ -115,16 +115,26 @@ if __name__ == '__main__':
 
     question = st.text_input('Escribe una pregunta relacionada a Heru')
     if question:
+        if 'history' not in st.session_state:
+            st.session_state.history = ''
+            
         vector_store = Pinecone.from_existing_index(
             index_name=nombre_index, embedding=embeddings)
-        answer = ask_and_get_answer_memory(vector_store, question, k)
+        answer = ask_and_get_answer_memory(vector_store, question, k, history=st.session_state.history)
         st.text_area('Respuesta', answer)
 
         results = vector_store.similarity_search(question, k=k)
         result_list = []
         for result in results:
             result_list.append(result.page_content)
-            result_string = '\n \n \n'.join(result_list)
+            result_string = '\n - \n'.join(result_list)
         st.divider()
         with st.expander("Ver chunks de referencia"):
             st.text(result_string)
+        
+        value = f'\nHUMAN: {question} \nSYSTEM: {answer}'
+        st.session_state.history = f'{value}  \n{st.session_state.history}'
+        h = st.session_state.history
+        
+        with st.expander("Ver historial"):
+            st.text(h)

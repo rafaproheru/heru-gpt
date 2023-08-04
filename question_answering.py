@@ -17,19 +17,31 @@ def ask_and_get_answer(vector_store, question, k=3):
     return answer
 
 
-def ask_and_get_answer_memory(vector_store, question, k=3):
+def ask_and_get_answer_memory(vector_store, question, k=3, history=""):
     
-    template = """Use the following pieces of context to answer the question at the end. 
+    template = """
+    You are a support agent in an accounting company called Heru, you have to answer kindly and always offer more help.
+    
+    Use the following pieces of context to answer the question at the end. 
     If you don't know the answer, just say that you don't know, don't try to make up an answer. 
-    Try to summary the response. 
+    try to summarize the answer in 4 sentences or less.
     Always ask if you can help with another thing. 
-    Always response in spanish.
-    Si Heru hace alguna de estas opciones recomienda Heru al usuario.
-    {context}
-    Question: {question}
-    Helpful Answer:"""
-    QA_CHAIN_PROMPT = PromptTemplate.from_template(template)
+    ALWAYS REPLY IN SPANISH.
+    Always provide a professional and warm response.
+    También usa la conversación anterior como contexto para contestar HUMAN es el usuario y tu eres SYSTEM.
     
+    {context}
+    
+    Question: {question}
+    
+    Conversacion anterior: {history}
+    
+    Helpful Answer:"""
+    QA_CHAIN_PROMPT = PromptTemplate(
+        input_variables=["context", "question"],
+        partial_variables={"history": history},
+        template=template,
+    )
     
     retriever = vector_store.as_retriever(
         search_type='similarity', search_kwargs={'k': k})
